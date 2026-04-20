@@ -6,280 +6,227 @@
   <title>Routeplanner</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
-
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --ink:    #1a1a18;
-      --paper:  #f5f0e8;
-      --moss:   #3d6b47;
-      --trail:  #c85a1e;
-      --mist:   #e8e2d6;
-      --accent: #d4a843;
-      --soft:   rgba(26,26,24,0.08);
+      --ink:   #1a1a18;
+      --paper: #f5f0e8;
+      --moss:  #3d6b47;
+      --trail: #c85a1e;
+      --mist:  #e8e2d6;
+      --bike:  #1a6fa8;
+      --r: 8px;
     }
-
-    html, body {
-      height: 100%;
-      font-family: 'DM Mono', monospace;
-      background: var(--ink);
-      color: var(--ink);
-      overflow: hidden;
-    }
-
-    #map {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-    }
+    html, body { height: 100%; font-family: 'DM Mono', monospace; background: var(--ink); color: var(--ink); overflow: hidden; }
+    #map { position: fixed; inset: 0; z-index: 0; }
 
     /* ── top bar ── */
     #topbar {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      z-index: 900;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      background: var(--paper);
-      border-bottom: 2px solid var(--ink);
-      gap: 10px;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 900;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; gap: 10px;
+      background: var(--paper); border-bottom: 2px solid var(--ink);
     }
+    #topbar h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 1.1rem; letter-spacing: -0.02em; white-space: nowrap; }
 
-    #topbar h1 {
-      font-family: 'Fraunces', serif;
-      font-weight: 600;
-      font-size: 1.15rem;
-      letter-spacing: -0.02em;
-      white-space: nowrap;
+    #topbar-right { display: flex; gap: 8px; align-items: center; }
+
+    #mode-group { display: flex; gap: 4px; background: var(--mist); border: 1.5px solid var(--ink); border-radius: 6px; padding: 3px; }
+    .mode-btn { border: none; background: transparent; cursor: pointer; font-family: 'DM Mono', monospace; font-size: 0.72rem; padding: 5px 10px; border-radius: 4px; transition: background 0.15s, color 0.15s; color: var(--ink); white-space: nowrap; }
+    .mode-btn.active { background: var(--ink); color: var(--paper); }
+
+    #btn-layers {
+      border: 1.5px solid var(--ink); background: var(--mist);
+      cursor: pointer; font-size: 1rem; width: 36px; height: 36px;
+      border-radius: 6px; display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s; flex-shrink: 0;
     }
+    #btn-layers.open { background: var(--ink); color: var(--paper); }
 
-    /* mode pills */
-    #mode-group {
-      display: flex;
-      gap: 4px;
-      background: var(--mist);
-      border: 1.5px solid var(--ink);
-      border-radius: 6px;
-      padding: 3px;
+    /* ── layers panel ── */
+    #layers-panel {
+      position: fixed; top: 62px; right: 14px; z-index: 950;
+      background: var(--paper); border: 2px solid var(--ink);
+      border-radius: var(--r); width: 240px;
+      box-shadow: 4px 4px 0 var(--ink);
+      overflow: hidden;
+      display: none;
     }
+    #layers-panel.open { display: block; }
 
-    .mode-btn {
-      border: none;
-      background: transparent;
-      cursor: pointer;
+    .lp-section { padding: 10px 12px; }
+    .lp-section + .lp-section { border-top: 1.5px solid var(--mist); }
+    .lp-title { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em; color: #888; margin-bottom: 8px; }
+
+    /* basemap grid */
+    .basemap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .bm-btn {
+      border: 1.5px solid var(--mist); background: var(--mist);
+      border-radius: 6px; cursor: pointer; padding: 0; overflow: hidden;
+      display: flex; flex-direction: column; align-items: center;
+      transition: border-color 0.15s;
       font-family: 'DM Mono', monospace;
-      font-size: 0.72rem;
-      padding: 5px 9px;
-      border-radius: 4px;
-      transition: background 0.15s, color 0.15s;
-      color: var(--ink);
-      white-space: nowrap;
     }
+    .bm-btn:hover { border-color: #aaa; }
+    .bm-btn.active { border-color: var(--ink); border-width: 2px; }
+    .bm-thumb {
+      width: 100%; height: 52px; object-fit: cover;
+      border-bottom: 1px solid var(--mist);
+      background: #ddd;
+      display: block;
+    }
+    .bm-label { font-size: 0.65rem; padding: 4px 6px; text-align: center; color: var(--ink); }
 
-    .mode-btn.active {
-      background: var(--ink);
-      color: var(--paper);
+    /* overlay toggles */
+    .overlay-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 0; gap: 8px;
     }
+    .overlay-info { display: flex; flex-direction: column; gap: 2px; }
+    .overlay-name { font-size: 0.75rem; }
+    .overlay-sub  { font-size: 0.62rem; color: #888; }
+
+    /* toggle switch */
+    .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-track {
+      position: absolute; inset: 0; background: var(--mist);
+      border: 1.5px solid #bbb; border-radius: 20px; cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .toggle-track::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 13px; height: 13px; background: #aaa;
+      border-radius: 50%; transition: transform 0.2s, background 0.2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--ink); border-color: var(--ink); }
+    .toggle input:checked + .toggle-track::after { transform: translateX(16px); background: #fff; }
+
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
 
     /* ── bottom panel ── */
     #panel {
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      z-index: 900;
-      background: var(--paper);
-      border-top: 2px solid var(--ink);
-      padding: 12px 14px;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 900;
+      background: var(--paper); border-top: 2px solid var(--ink);
+      padding: 12px 14px; display: flex; gap: 8px;
+      align-items: center; flex-wrap: wrap;
     }
+    #stats { flex: 1; min-width: 100px; }
+    #dist-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: #666; }
+    #dist-value { font-family: 'Fraunces', serif; font-size: 1.5rem; font-weight: 600; line-height: 1; color: var(--moss); }
+    #dist-value.bike { color: var(--bike); }
+    #waypoint-count { font-size: 0.68rem; color: #888; margin-top: 2px; }
 
-    #stats {
-      flex: 1;
-      min-width: 100px;
-    }
-
-    #dist-label {
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #666;
-    }
-
-    #dist-value {
-      font-family: 'Fraunces', serif;
-      font-size: 1.5rem;
-      font-weight: 600;
-      line-height: 1;
-      color: var(--moss);
-    }
-
-    #waypoint-count {
-      font-size: 0.68rem;
-      color: #888;
-      margin-top: 2px;
-    }
-
-    .action-btn {
-      border: 1.5px solid var(--ink);
-      background: var(--mist);
-      cursor: pointer;
-      font-family: 'DM Mono', monospace;
-      font-size: 0.72rem;
-      padding: 8px 12px;
-      border-radius: 6px;
-      transition: background 0.15s;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      white-space: nowrap;
-      color: var(--ink);
-    }
-
-    .action-btn:hover { background: var(--mist); filter: brightness(0.95); }
-
-    #btn-undo { border-color: var(--ink); }
+    .action-btn { border: 1.5px solid var(--ink); background: var(--mist); cursor: pointer; font-family: 'DM Mono', monospace; font-size: 0.72rem; padding: 8px 12px; border-radius: 6px; transition: background 0.15s; display: flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--ink); }
     #btn-clear { border-color: #c0392b; color: #c0392b; }
-    #btn-export {
-      background: var(--moss);
-      border-color: var(--moss);
-      color: #fff;
-      font-weight: 500;
-    }
-    #btn-export:hover { filter: brightness(1.1); }
-    #btn-export:disabled {
-      background: var(--mist);
-      border-color: #ccc;
-      color: #aaa;
-      cursor: not-allowed;
-    }
+    #btn-export { background: var(--moss); border-color: var(--moss); color: #fff; font-weight: 500; }
+    #btn-export.bike { background: var(--bike); border-color: var(--bike); }
+    #btn-export:disabled { background: var(--mist); border-color: #ccc; color: #aaa; cursor: not-allowed; }
 
-    /* ── hint overlay ── */
-    #hint {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 800;
-      background: var(--paper);
-      border: 2px solid var(--ink);
-      border-radius: 10px;
-      padding: 18px 22px;
-      text-align: center;
-      pointer-events: none;
-      transition: opacity 0.4s;
-      max-width: 260px;
-    }
-
+    /* ── misc ── */
+    #hint { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 800; background: var(--paper); border: 2px solid var(--ink); border-radius: 10px; padding: 18px 22px; text-align: center; pointer-events: none; transition: opacity 0.4s; max-width: 260px; }
     #hint.hidden { opacity: 0; }
-
     #hint .hint-icon { font-size: 2rem; margin-bottom: 6px; }
-    #hint p {
-      font-family: 'Fraunces', serif;
-      font-style: italic;
-      font-size: 0.95rem;
-      line-height: 1.4;
-      color: #555;
-    }
+    #hint p { font-family: 'Fraunces', serif; font-style: italic; font-size: 0.95rem; line-height: 1.4; color: #555; }
 
-    /* ── toast ── */
-    #toast {
-      position: fixed;
-      top: 70px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 999;
-      background: var(--ink);
-      color: var(--paper);
-      font-size: 0.75rem;
-      padding: 7px 16px;
-      border-radius: 20px;
-      opacity: 0;
-      transition: opacity 0.3s;
-      white-space: nowrap;
-      pointer-events: none;
-    }
+    #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 999; background: var(--ink); color: var(--paper); font-size: 0.75rem; padding: 7px 16px; border-radius: 20px; opacity: 0; transition: opacity 0.3s; white-space: nowrap; pointer-events: none; }
     #toast.show { opacity: 1; }
 
-    /* ── loading indicator ── */
-    #loader {
-      position: fixed;
-      top: 62px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 910;
-      background: var(--accent);
-      color: var(--ink);
-      font-size: 0.7rem;
-      padding: 5px 14px;
-      border-radius: 20px;
-      display: none;
-      align-items: center;
-      gap: 6px;
-    }
+    #loader { position: fixed; top: 62px; left: 50%; transform: translateX(-50%); z-index: 910; background: #d4a843; color: var(--ink); font-size: 0.7rem; padding: 5px 14px; border-radius: 20px; display: none; align-items: center; gap: 6px; }
     #loader.show { display: flex; }
-
     @keyframes spin { to { transform: rotate(360deg); } }
-    .spinner {
-      width: 10px; height: 10px;
-      border: 2px solid var(--ink);
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-    }
+    .spinner { width: 10px; height: 10px; border: 2px solid var(--ink); border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; }
 
-    /* leaflet overrides */
+    .wpt-dot { width: 22px; height: 22px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2.5px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+    .wpt-dot.first { background: var(--moss); }
+    .wpt-dot.last  { background: var(--trail); }
+    .wpt-dot.mid   { background: #d4a843; }
+
     .leaflet-control-zoom { border: 1.5px solid var(--ink) !important; }
-    .leaflet-control-zoom a {
-      font-family: 'Fraunces', serif !important;
-      color: var(--ink) !important;
-      background: var(--paper) !important;
-    }
-    .leaflet-control-zoom a:hover { background: var(--mist) !important; }
-
-    .waypoint-marker {
-      width: 22px; height: 22px;
-      border-radius: 50% 50% 50% 0;
-      transform: rotate(-45deg);
-      border: 2.5px solid #fff;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.35);
-    }
-    .waypoint-marker.first { background: var(--moss); }
-    .waypoint-marker.last  { background: var(--trail); }
-    .waypoint-marker.mid   { background: var(--accent); }
+    .leaflet-control-zoom a { font-family: 'Fraunces', serif !important; color: var(--ink) !important; background: var(--paper) !important; }
   </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<!-- top bar -->
 <div id="topbar">
   <h1>Routeplanner</h1>
-  <div id="mode-group">
-    <button class="mode-btn active" data-mode="foot" data-profile="foot-walking">🚶 Wandelen</button>
-    <button class="mode-btn" data-mode="foot" data-profile="foot-hiking">🏃 Hardlopen</button>
-    <button class="mode-btn" data-mode="bike" data-profile="cycling-regular">🚴 Fietsen</button>
+  <div id="topbar-right">
+    <div id="mode-group">
+      <button class="mode-btn active" data-profile="pedestrian">🚶 Wandelen / Hardlopen</button>
+      <button class="mode-btn" data-profile="bicycle">🚴 Fietsen</button>
+    </div>
+    <button id="btn-layers" title="Kaartlagen">🗂</button>
   </div>
 </div>
 
-<!-- hint -->
+<!-- layers panel -->
+<div id="layers-panel">
+  <div class="lp-section">
+    <div class="lp-title">Achtergrondkaart</div>
+    <div class="basemap-grid">
+      <button class="bm-btn active" data-id="osm">
+        <img class="bm-thumb" src="https://tile.openstreetmap.org/12/2048/1365.png" alt="" loading="lazy">
+        <span class="bm-label">🗺 Standaard</span>
+      </button>
+      <button class="bm-btn" data-id="topo">
+        <img class="bm-thumb" src="https://tile.opentopomap.org/12/2048/1365.png" alt="" loading="lazy">
+        <span class="bm-label">🏔 Topo</span>
+      </button>
+      <button class="bm-btn" data-id="satellite">
+        <img class="bm-thumb" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/12/1365/2048" alt="" loading="lazy">
+        <span class="bm-label">🛰 Satelliet</span>
+      </button>
+      <button class="bm-btn" data-id="cyclosm">
+        <img class="bm-thumb" src="https://a.tile-cyclosm.openstreetmap.fr/cyclosm/12/2048/1365.png" alt="" loading="lazy">
+        <span class="bm-label">🚴 CyclOSM</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="lp-section">
+    <div class="lp-title">Lagen</div>
+
+    <div class="overlay-row">
+      <div class="overlay-info">
+        <span class="overlay-name"><span class="dot" style="background:#1a73e8"></span>Knooppunten fiets</span>
+        <span class="overlay-sub">Landelijk knooppuntennetwerk</span>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-cycling">
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+
+    <div class="overlay-row">
+      <div class="overlay-info">
+        <span class="overlay-name"><span class="dot" style="background:#2e9e44"></span>Knooppunten wandel</span>
+        <span class="overlay-sub">Landelijk knooppuntennetwerk</span>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-hiking">
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="lp-section" style="font-size:0.6rem; color:#999; line-height:1.5;">
+    Kaartdata: © <a href="https://www.openstreetmap.org/copyright" target="_blank" style="color:inherit">OpenStreetMap</a> bijdragers ·
+    Topo: © <a href="https://opentopomap.org" target="_blank" style="color:inherit">OpenTopoMap</a> (CC-BY-SA) ·
+    Satelliet: © Esri ·
+    Knooppunten: © <a href="https://cycling.waymarkedtrails.org" target="_blank" style="color:inherit">Waymarked Trails</a>
+  </div>
+</div>
+
 <div id="hint">
   <div class="hint-icon">📍</div>
   <p>Tik op de kaart om je eerste punt te zetten</p>
 </div>
 
-<!-- loader -->
 <div id="loader"><div class="spinner"></div> Route berekenen…</div>
-
-<!-- toast -->
 <div id="toast"></div>
 
-<!-- bottom panel -->
 <div id="panel">
   <div id="stats">
     <div id="dist-label">Afstand</div>
@@ -293,204 +240,230 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// ── state ──
-const waypoints   = [];   // [{lat, lng}]
-const markers     = [];   // Leaflet markers
-let   routeLayer  = null; // current polyline
-let   routeCoords = [];   // decoded geometry [{lat,lng}]
-let   totalDist   = 0;
-let   currentProfile = 'foot-walking';
-
-// OSRM profile map
-const osrmProfile = {
-  'foot-walking': 'foot',
-  'foot-hiking':  'foot',
-  'cycling-regular': 'bike',
+// ── Basemap tile definitions ───────────────────────────────────────────────
+const BASEMAPS = {
+  osm: {
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    opts: { maxZoom: 19, subdomains: 'abc', attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> bijdragers' }
+  },
+  topo: {
+    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    opts: { maxZoom: 17, subdomains: 'abc', attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA), © OpenStreetMap bijdragers' }
+  },
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    opts: { maxZoom: 19, attribution: 'Tiles © Esri — Source: Esri, Maxar, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community' }
+  },
+  cyclosm: {
+    url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+    opts: { maxZoom: 20, subdomains: 'abc', attribution: '© <a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a>, © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> bijdragers' }
+  }
 };
 
-// ── map ──
-const map = L.map('map', { zoomControl: true }).setView([52.37, 4.89], 13);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  maxZoom: 19,
-}).addTo(map);
+// ── Overlay definitions ────────────────────────────────────────────────────
+// Waymarked Trails: free OSM-based overlay showing cycling & hiking networks
+// including Dutch/Belgian knooppunten (junction) networks
+const OVERLAYS = {
+  cycling: L.tileLayer('https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png', {
+    maxZoom: 19, opacity: 0.8,
+    attribution: '© <a href="https://cycling.waymarkedtrails.org">Waymarked Trails Cycling</a>'
+  }),
+  hiking: L.tileLayer('https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png', {
+    maxZoom: 19, opacity: 0.8,
+    attribution: '© <a href="https://hiking.waymarkedtrails.org">Waymarked Trails Hiking</a>'
+  })
+};
 
-// ── helpers ──
-function toast(msg, dur = 2200) {
+// ── State ──────────────────────────────────────────────────────────────────
+const waypoints = [];
+const markers   = [];
+let routeLayer  = null;
+let routeCoords = [];
+let totalDist   = 0;
+let curProfile  = 'pedestrian';
+let curBasemap  = 'osm';
+
+// ── Valhalla costing ───────────────────────────────────────────────────────
+const VALHALLA_URL = 'https://valhalla1.openstreetmap.de/route';
+const COSTING = {
+  pedestrian: {
+    costing: 'pedestrian',
+    costing_options: { pedestrian: { use_roads: 0.05, use_tracks: 1.0, use_ferry: 0.0, walking_speed: 5.0, sidewalk_factor: 0.3 } }
+  },
+  bicycle: {
+    costing: 'bicycle',
+    costing_options: { bicycle: { bicycle_type: 'Hybrid', use_roads: 0.2, use_living_streets: 0.7, use_tracks: 0.5, avoid_bad_surfaces: 0.5, cycling_speed: 18 } }
+  }
+};
+const LINE_COLOR = { pedestrian: '#c85a1e', bicycle: '#1a6fa8' };
+
+// ── Decode Valhalla precision-6 polyline ───────────────────────────────────
+function decodeShape(str) {
+  let i = 0, lat = 0, lng = 0, out = [];
+  while (i < str.length) {
+    let s = 0, r = 0, b;
+    do { b = str.charCodeAt(i++) - 63; r |= (b & 0x1f) << s; s += 5; } while (b >= 0x20);
+    lat += (r & 1) ? ~(r >> 1) : (r >> 1);
+    s = 0; r = 0;
+    do { b = str.charCodeAt(i++) - 63; r |= (b & 0x1f) << s; s += 5; } while (b >= 0x20);
+    lng += (r & 1) ? ~(r >> 1) : (r >> 1);
+    out.push({ lat: lat / 1e6, lng: lng / 1e6 });
+  }
+  return out;
+}
+
+// ── Map ────────────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([52.37, 4.89], 13);
+let activeBasemap = L.tileLayer(BASEMAPS.osm.url, BASEMAPS.osm.opts).addTo(map);
+
+// ── Basemap switcher ───────────────────────────────────────────────────────
+function switchBasemap(id) {
+  if (id === curBasemap) return;
+  map.removeLayer(activeBasemap);
+  const def = BASEMAPS[id];
+  activeBasemap = L.tileLayer(def.url, def.opts).addTo(map);
+  // Ensure overlays stay on top
+  Object.values(OVERLAYS).forEach(ol => { if (map.hasLayer(ol)) ol.bringToFront(); });
+  // Ensure route and markers stay on top
+  if (routeLayer) routeLayer.bringToFront();
+  curBasemap = id;
+  document.querySelectorAll('.bm-btn').forEach(b => b.classList.toggle('active', b.dataset.id === id));
+}
+
+document.querySelectorAll('.bm-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchBasemap(btn.dataset.id));
+});
+
+// ── Overlay toggles ────────────────────────────────────────────────────────
+document.getElementById('toggle-cycling').addEventListener('change', function() {
+  this.checked ? OVERLAYS.cycling.addTo(map) : map.removeLayer(OVERLAYS.cycling);
+  if (routeLayer) routeLayer.bringToFront();
+  markers.forEach(m => m.bringToFront?.());
+});
+
+document.getElementById('toggle-hiking').addEventListener('change', function() {
+  this.checked ? OVERLAYS.hiking.addTo(map) : map.removeLayer(OVERLAYS.hiking);
+  if (routeLayer) routeLayer.bringToFront();
+});
+
+// ── Layers panel toggle ────────────────────────────────────────────────────
+const btnLayers   = document.getElementById('btn-layers');
+const layersPanel = document.getElementById('layers-panel');
+
+btnLayers.addEventListener('click', () => {
+  const open = layersPanel.classList.toggle('open');
+  btnLayers.classList.toggle('open', open);
+});
+
+// Close panel when clicking map
+map.on('click', () => {
+  layersPanel.classList.remove('open');
+  btnLayers.classList.remove('open');
+});
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
+function toast(msg, ms = 2500) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), dur);
+  setTimeout(() => el.classList.remove('show'), ms);
 }
+function setLoader(on) { document.getElementById('loader').classList.toggle('show', on); }
 
-function setLoader(on) {
-  document.getElementById('loader').classList.toggle('show', on);
+function mkIcon(i, total) {
+  const cls = i === 0 ? 'first' : i === total - 1 ? 'last' : 'mid';
+  return L.divIcon({ className: '', html: `<div class="wpt-dot ${cls}"></div>`, iconSize: [22,22], iconAnchor: [11,22] });
 }
+function refreshMarkers() { markers.forEach((m, i) => m.setIcon(mkIcon(i, markers.length))); }
 
-function updateStats() {
+function updateUI() {
   const km = (totalDist / 1000).toFixed(1).replace('.', ',');
-  document.getElementById('dist-value').textContent = km + ' km';
-  document.getElementById('waypoint-count').textContent = waypoints.length + ' punt' + (waypoints.length !== 1 ? 'en' : '');
-  document.getElementById('btn-export').disabled = routeCoords.length < 2;
+  const dv = document.getElementById('dist-value');
+  dv.textContent = km + ' km';
+  dv.className = curProfile === 'bicycle' ? 'bike' : '';
+  document.getElementById('waypoint-count').textContent =
+    waypoints.length + ' punt' + (waypoints.length !== 1 ? 'en' : '');
+  const exp = document.getElementById('btn-export');
+  exp.disabled  = routeCoords.length < 2;
+  exp.className = 'action-btn' + (curProfile === 'bicycle' && !exp.disabled ? ' bike' : '');
   document.getElementById('hint').classList.toggle('hidden', waypoints.length > 0);
 }
 
-function markerIcon(idx) {
-  const cls = idx === 0 ? 'first' : idx === waypoints.length - 1 ? 'last' : 'mid';
-  return L.divIcon({
-    className: '',
-    html: `<div class="waypoint-marker ${cls}"></div>`,
-    iconSize: [22, 22],
-    iconAnchor: [11, 22],
-  });
-}
-
-function refreshMarkerStyles() {
-  markers.forEach((m, i) => {
-    const cls = i === 0 ? 'first' : i === markers.length - 1 ? 'last' : 'mid';
-    m.setIcon(L.divIcon({
-      className: '',
-      html: `<div class="waypoint-marker ${cls}"></div>`,
-      iconSize: [22, 22],
-      iconAnchor: [11, 22],
-    }));
-  });
-}
-
-// ── routing ──
+// ── Routing ────────────────────────────────────────────────────────────────
 async function calcRoute() {
   if (waypoints.length < 2) {
     if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
-    routeCoords = [];
-    totalDist = 0;
-    updateStats();
-    return;
+    routeCoords = []; totalDist = 0; updateUI(); return;
   }
-
-  const profile = osrmProfile[currentProfile];
-  const coords  = waypoints.map(p => p.lng + ',' + p.lat).join(';');
-  const url     = `https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson`;
-
+  const body = { locations: waypoints.map(p => ({ lon: p.lng, lat: p.lat })), ...COSTING[curProfile], directions_options: { units: 'km' } };
   setLoader(true);
   try {
-    const res  = await fetch(url);
+    const res = await fetch(VALHALLA_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Geen route gevonden'); }
     const data = await res.json();
-    if (data.code !== 'Ok') throw new Error('Geen route gevonden');
-
-    const route = data.routes[0];
-    totalDist   = route.distance;
-    routeCoords = route.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
-
+    routeCoords = data.trip.legs.flatMap(l => decodeShape(l.shape));
+    totalDist   = data.trip.summary.length * 1000;
     if (routeLayer) map.removeLayer(routeLayer);
-    routeLayer = L.polyline(routeCoords, {
-      color:     '#c85a1e',
-      weight:    5,
-      opacity:   0.85,
-      lineJoin:  'round',
-      lineCap:   'round',
-    }).addTo(map);
-  } catch (e) {
-    toast('⚠️ ' + e.message);
-    routeCoords = [];
-    totalDist = 0;
-  } finally {
-    setLoader(false);
-    updateStats();
-  }
+    routeLayer = L.polyline(routeCoords, { color: LINE_COLOR[curProfile], weight: 5, opacity: 0.85, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+  } catch(e) {
+    toast('⚠️ ' + e.message); routeCoords = []; totalDist = 0;
+  } finally { setLoader(false); updateUI(); }
 }
 
-// ── map click: add waypoint ──
-map.on('click', async (e) => {
-  const { lat, lng } = e.latlng;
+// ── Waypoint interaction ───────────────────────────────────────────────────
+map.on('click', async ({ latlng }) => {
+  const { lat, lng } = latlng;
+  const idx = waypoints.length;
   waypoints.push({ lat, lng });
-
-  const m = L.marker([lat, lng], { icon: markerIcon(waypoints.length - 1), draggable: true })
-    .addTo(map);
-
-  const idx = markers.length;
-  m.on('dragend', () => {
-    const p = m.getLatLng();
-    waypoints[idx] = { lat: p.lat, lng: p.lng };
-    calcRoute();
-  });
-
+  const m = L.marker([lat, lng], { icon: mkIcon(idx, waypoints.length), draggable: true }).addTo(map);
+  m.on('dragend', () => { const p = m.getLatLng(); waypoints[idx] = { lat: p.lat, lng: p.lng }; calcRoute(); });
   markers.push(m);
-  refreshMarkerStyles();
+  refreshMarkers();
   await calcRoute();
 });
 
-// ── undo ──
 document.getElementById('btn-undo').addEventListener('click', async () => {
   if (!waypoints.length) return;
-  waypoints.pop();
-  const m = markers.pop();
-  if (m) map.removeLayer(m);
-  refreshMarkerStyles();
-  await calcRoute();
+  waypoints.pop(); map.removeLayer(markers.pop()); refreshMarkers(); await calcRoute();
 });
 
-// ── clear ──
 document.getElementById('btn-clear').addEventListener('click', () => {
-  waypoints.length = 0;
-  markers.forEach(m => map.removeLayer(m));
-  markers.length = 0;
+  waypoints.length = 0; markers.forEach(m => map.removeLayer(m)); markers.length = 0;
   if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
-  routeCoords = [];
-  totalDist = 0;
-  updateStats();
+  routeCoords = []; totalDist = 0; updateUI();
 });
 
-// ── mode switch ──
 document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentProfile = btn.dataset.profile;
+    btn.classList.add('active'); curProfile = btn.dataset.profile; updateUI();
     if (waypoints.length >= 2) await calcRoute();
   });
 });
 
-// ── GPX export ──
+// ── GPX export ─────────────────────────────────────────────────────────────
 document.getElementById('btn-export').addEventListener('click', () => {
   if (routeCoords.length < 2) return;
-
-  const modeNames = {
-    'foot-walking':    'Wandelroute',
-    'foot-hiking':     'Hardlooproute',
-    'cycling-regular': 'Fietsroute',
-  };
-  const name = modeNames[currentProfile] || 'Route';
+  const name = curProfile === 'bicycle' ? 'Fietsroute' : 'Wandelroute';
   const now  = new Date().toISOString();
-
-  const trkpts = routeCoords
-    .map(p => `    <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lng.toFixed(6)}"><ele>0</ele></trkpt>`)
-    .join('\n');
-
+  const trkpts = routeCoords.map(p => `    <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lng.toFixed(6)}"><ele>0</ele></trkpt>`).join('\n');
   const gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="Routeplanner" xmlns="http://www.topografix.com/GPX/1/1">
-  <metadata>
-    <name>${name}</name>
-    <time>${now}</time>
-  </metadata>
-  <trk>
-    <name>${name}</name>
-    <type>${currentProfile}</type>
-    <trkseg>
+  <metadata><n>${name}</n><time>${now}</time></metadata>
+  <trk><n>${name}</n><type>${curProfile}</type><trkseg>
 ${trkpts}
-    </trkseg>
-  </trk>
+  </trkseg></trk>
 </gpx>`;
-
   const blob = new Blob([gpx], { type: 'application/gpx+xml' });
-  const a    = document.createElement('a');
-  a.href     = URL.createObjectURL(blob);
-  a.download = name.toLowerCase().replace(/\s/g, '_') + '_' + now.slice(0,10) + '.gpx';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name.toLowerCase() + '_' + now.slice(0, 10) + '.gpx';
   a.click();
   toast('✅ GPX opgeslagen!');
 });
 
-// init
-updateStats();
+updateUI();
 </script>
 </body>
 </html>
+
