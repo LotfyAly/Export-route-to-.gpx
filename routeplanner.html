@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Routeplanner</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink:    #1a1a18;
+      --paper:  #f5f0e8;
+      --moss:   #3d6b47;
+      --trail:  #c85a1e;
+      --mist:   #e8e2d6;
+      --accent: #d4a843;
+      --soft:   rgba(26,26,24,0.08);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'DM Mono', monospace;
+      background: var(--ink);
+      color: var(--ink);
+      overflow: hidden;
+    }
+
+    #map {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+
+    /* ── top bar ── */
+    #topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 900;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--paper);
+      border-bottom: 2px solid var(--ink);
+      gap: 10px;
+    }
+
+    #topbar h1 {
+      font-family: 'Fraunces', serif;
+      font-weight: 600;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+    }
+
+    /* mode pills */
+    #mode-group {
+      display: flex;
+      gap: 4px;
+      background: var(--mist);
+      border: 1.5px solid var(--ink);
+      border-radius: 6px;
+      padding: 3px;
+    }
+
+    .mode-btn {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      padding: 5px 9px;
+      border-radius: 4px;
+      transition: background 0.15s, color 0.15s;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+
+    .mode-btn.active {
+      background: var(--ink);
+      color: var(--paper);
+    }
+
+    /* ── bottom panel ── */
+    #panel {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 900;
+      background: var(--paper);
+      border-top: 2px solid var(--ink);
+      padding: 12px 14px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    #stats {
+      flex: 1;
+      min-width: 100px;
+    }
+
+    #dist-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #666;
+    }
+
+    #dist-value {
+      font-family: 'Fraunces', serif;
+      font-size: 1.5rem;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--moss);
+    }
+
+    #waypoint-count {
+      font-size: 0.68rem;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    .action-btn {
+      border: 1.5px solid var(--ink);
+      background: var(--mist);
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.72rem;
+      padding: 8px 12px;
+      border-radius: 6px;
+      transition: background 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+      color: var(--ink);
+    }
+
+    .action-btn:hover { background: var(--mist); filter: brightness(0.95); }
+
+    #btn-undo { border-color: var(--ink); }
+    #btn-clear { border-color: #c0392b; color: #c0392b; }
+    #btn-export {
+      background: var(--moss);
+      border-color: var(--moss);
+      color: #fff;
+      font-weight: 500;
+    }
+    #btn-export:hover { filter: brightness(1.1); }
+    #btn-export:disabled {
+      background: var(--mist);
+      border-color: #ccc;
+      color: #aaa;
+      cursor: not-allowed;
+    }
+
+    /* ── hint overlay ── */
+    #hint {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 800;
+      background: var(--paper);
+      border: 2px solid var(--ink);
+      border-radius: 10px;
+      padding: 18px 22px;
+      text-align: center;
+      pointer-events: none;
+      transition: opacity 0.4s;
+      max-width: 260px;
+    }
+
+    #hint.hidden { opacity: 0; }
+
+    #hint .hint-icon { font-size: 2rem; margin-bottom: 6px; }
+    #hint p {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-size: 0.95rem;
+      line-height: 1.4;
+      color: #555;
+    }
+
+    /* ── toast ── */
+    #toast {
+      position: fixed;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+      background: var(--ink);
+      color: var(--paper);
+      font-size: 0.75rem;
+      padding: 7px 16px;
+      border-radius: 20px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── loading indicator ── */
+    #loader {
+      position: fixed;
+      top: 62px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 910;
+      background: var(--accent);
+      color: var(--ink);
+      font-size: 0.7rem;
+      padding: 5px 14px;
+      border-radius: 20px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+    #loader.show { display: flex; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 10px; height: 10px;
+      border: 2px solid var(--ink);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    /* leaflet overrides */
+    .leaflet-control-zoom { border: 1.5px solid var(--ink) !important; }
+    .leaflet-control-zoom a {
+      font-family: 'Fraunces', serif !important;
+      color: var(--ink) !important;
+      background: var(--paper) !important;
+    }
+    .leaflet-control-zoom a:hover { background: var(--mist) !important; }
+
+    .waypoint-marker {
+      width: 22px; height: 22px;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      border: 2.5px solid #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    }
+    .waypoint-marker.first { background: var(--moss); }
+    .waypoint-marker.last  { background: var(--trail); }
+    .waypoint-marker.mid   { background: var(--accent); }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- top bar -->
+<div id="topbar">
+  <h1>Routeplanner</h1>
+  <div id="mode-group">
+    <button class="mode-btn active" data-mode="foot" data-profile="foot-walking">🚶 Wandelen</button>
+    <button class="mode-btn" data-mode="foot" data-profile="foot-hiking">🏃 Hardlopen</button>
+    <button class="mode-btn" data-mode="bike" data-profile="cycling-regular">🚴 Fietsen</button>
+  </div>
+</div>
+
+<!-- hint -->
+<div id="hint">
+  <div class="hint-icon">📍</div>
+  <p>Tik op de kaart om je eerste punt te zetten</p>
+</div>
+
+<!-- loader -->
+<div id="loader"><div class="spinner"></div> Route berekenen…</div>
+
+<!-- toast -->
+<div id="toast"></div>
+
+<!-- bottom panel -->
+<div id="panel">
+  <div id="stats">
+    <div id="dist-label">Afstand</div>
+    <div id="dist-value">0,0 km</div>
+    <div id="waypoint-count">0 punten</div>
+  </div>
+  <button class="action-btn" id="btn-undo">↩ Ongedaan</button>
+  <button class="action-btn" id="btn-clear">✕ Wissen</button>
+  <button class="action-btn" id="btn-export" disabled>↓ GPX</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── state ──
+const waypoints   = [];   // [{lat, lng}]
+const markers     = [];   // Leaflet markers
+let   routeLayer  = null; // current polyline
+let   routeCoords = [];   // decoded geometry [{lat,lng}]
+let   totalDist   = 0;
+let   currentProfile = 'foot-walking';
+
+// OSRM profile map
+const osrmProfile = {
+  'foot-walking': 'foot',
+  'foot-hiking':  'foot',
+  'cycling-regular': 'bike',
+};
+
+// ── map ──
+const map = L.map('map', { zoomControl: true }).setView([52.37, 4.89], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+// ── helpers ──
+function toast(msg, dur = 2200) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+
+function setLoader(on) {
+  document.getElementById('loader').classList.toggle('show', on);
+}
+
+function updateStats() {
+  const km = (totalDist / 1000).toFixed(1).replace('.', ',');
+  document.getElementById('dist-value').textContent = km + ' km';
+  document.getElementById('waypoint-count').textContent = waypoints.length + ' punt' + (waypoints.length !== 1 ? 'en' : '');
+  document.getElementById('btn-export').disabled = routeCoords.length < 2;
+  document.getElementById('hint').classList.toggle('hidden', waypoints.length > 0);
+}
+
+function markerIcon(idx) {
+  const cls = idx === 0 ? 'first' : idx === waypoints.length - 1 ? 'last' : 'mid';
+  return L.divIcon({
+    className: '',
+    html: `<div class="waypoint-marker ${cls}"></div>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 22],
+  });
+}
+
+function refreshMarkerStyles() {
+  markers.forEach((m, i) => {
+    const cls = i === 0 ? 'first' : i === markers.length - 1 ? 'last' : 'mid';
+    m.setIcon(L.divIcon({
+      className: '',
+      html: `<div class="waypoint-marker ${cls}"></div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 22],
+    }));
+  });
+}
+
+// ── routing ──
+async function calcRoute() {
+  if (waypoints.length < 2) {
+    if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+    routeCoords = [];
+    totalDist = 0;
+    updateStats();
+    return;
+  }
+
+  const profile = osrmProfile[currentProfile];
+  const coords  = waypoints.map(p => p.lng + ',' + p.lat).join(';');
+  const url     = `https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson`;
+
+  setLoader(true);
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data.code !== 'Ok') throw new Error('Geen route gevonden');
+
+    const route = data.routes[0];
+    totalDist   = route.distance;
+    routeCoords = route.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
+
+    if (routeLayer) map.removeLayer(routeLayer);
+    routeLayer = L.polyline(routeCoords, {
+      color:     '#c85a1e',
+      weight:    5,
+      opacity:   0.85,
+      lineJoin:  'round',
+      lineCap:   'round',
+    }).addTo(map);
+  } catch (e) {
+    toast('⚠️ ' + e.message);
+    routeCoords = [];
+    totalDist = 0;
+  } finally {
+    setLoader(false);
+    updateStats();
+  }
+}
+
+// ── map click: add waypoint ──
+map.on('click', async (e) => {
+  const { lat, lng } = e.latlng;
+  waypoints.push({ lat, lng });
+
+  const m = L.marker([lat, lng], { icon: markerIcon(waypoints.length - 1), draggable: true })
+    .addTo(map);
+
+  const idx = markers.length;
+  m.on('dragend', () => {
+    const p = m.getLatLng();
+    waypoints[idx] = { lat: p.lat, lng: p.lng };
+    calcRoute();
+  });
+
+  markers.push(m);
+  refreshMarkerStyles();
+  await calcRoute();
+});
+
+// ── undo ──
+document.getElementById('btn-undo').addEventListener('click', async () => {
+  if (!waypoints.length) return;
+  waypoints.pop();
+  const m = markers.pop();
+  if (m) map.removeLayer(m);
+  refreshMarkerStyles();
+  await calcRoute();
+});
+
+// ── clear ──
+document.getElementById('btn-clear').addEventListener('click', () => {
+  waypoints.length = 0;
+  markers.forEach(m => map.removeLayer(m));
+  markers.length = 0;
+  if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+  routeCoords = [];
+  totalDist = 0;
+  updateStats();
+});
+
+// ── mode switch ──
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentProfile = btn.dataset.profile;
+    if (waypoints.length >= 2) await calcRoute();
+  });
+});
+
+// ── GPX export ──
+document.getElementById('btn-export').addEventListener('click', () => {
+  if (routeCoords.length < 2) return;
+
+  const modeNames = {
+    'foot-walking':    'Wandelroute',
+    'foot-hiking':     'Hardlooproute',
+    'cycling-regular': 'Fietsroute',
+  };
+  const name = modeNames[currentProfile] || 'Route';
+  const now  = new Date().toISOString();
+
+  const trkpts = routeCoords
+    .map(p => `    <trkpt lat="${p.lat.toFixed(6)}" lon="${p.lng.toFixed(6)}"><ele>0</ele></trkpt>`)
+    .join('\n');
+
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Routeplanner" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>${name}</name>
+    <time>${now}</time>
+  </metadata>
+  <trk>
+    <name>${name}</name>
+    <type>${currentProfile}</type>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = name.toLowerCase().replace(/\s/g, '_') + '_' + now.slice(0,10) + '.gpx';
+  a.click();
+  toast('✅ GPX opgeslagen!');
+});
+
+// init
+updateStats();
+</script>
+</body>
+</html>
