@@ -144,6 +144,38 @@
 
     .leaflet-control-zoom { border: 1.5px solid var(--ink) !important; }
     .leaflet-control-zoom a { font-family: 'Fraunces', serif !important; color: var(--ink) !important; background: var(--paper) !important; }
+
+    /* ── touch / mobile ── */
+    button, .toggle-track, .bm-btn { touch-action: manipulation; }
+    .wpt-dot { width: 28px; height: 28px; border-radius: 50% 50% 50% 0; border-width: 3px; }
+
+    @media (max-width: 520px) {
+      #topbar { padding: 8px 10px; gap: 6px; }
+      #topbar h1 { font-size: 0.9rem; }
+      .mode-btn { font-size: 0.65rem; padding: 5px 7px; }
+      #btn-layers { width: 34px; height: 34px; }
+      #panel { padding: 10px 10px; gap: 6px; flex-wrap: wrap; }
+      .action-btn { font-size: 0.65rem; padding: 7px 9px; }
+      #dist-value { font-size: 1.25rem; }
+    }
+
+    /* ── delete confirmation modal ── */
+    #delete-modal {
+      position: fixed; inset: 0; z-index: 1100;
+      background: rgba(0,0,0,0.45);
+      display: flex; align-items: center; justify-content: center;
+    }
+    #delete-modal.hidden { display: none; }
+    #delete-modal-box {
+      background: var(--paper); border: 2px solid var(--ink);
+      border-radius: var(--r); padding: 22px 24px;
+      box-shadow: 4px 4px 0 var(--ink);
+      text-align: center; max-width: 280px; width: 90%;
+    }
+    #delete-modal-box p { font-family: 'Fraunces', serif; font-size: 1rem; margin-bottom: 16px; line-height: 1.4; }
+    .modal-btns { display: flex; gap: 10px; justify-content: center; }
+    .modal-btns button { border: 1.5px solid var(--ink); background: var(--mist); cursor: pointer; font-family: 'DM Mono', monospace; font-size: 0.78rem; padding: 9px 16px; border-radius: 6px; touch-action: manipulation; color: var(--ink); }
+    #delete-confirm { background: #c0392b; border-color: #c0392b; color: #fff; font-weight: 500; }
   </style>
 </head>
 <body>
@@ -219,6 +251,16 @@
   </div>
 </div>
 
+<div id="delete-modal" class="hidden">
+  <div id="delete-modal-box">
+    <p>📍 Dit punt verwijderen?</p>
+    <div class="modal-btns">
+      <button id="delete-confirm">🗑 Verwijderen</button>
+      <button id="delete-cancel">Annuleren</button>
+    </div>
+  </div>
+</div>
+
 <div id="hint">
   <div class="hint-icon">📍</div>
   <p>Tik op de kaart om je eerste punt te zetten</p>
@@ -240,7 +282,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// ── Basemap tile definitions ───────────────────────────────────────────────
+// ── Basemap tile definitions ─────────────────────────────────────────────
 const BASEMAPS = {
   osm: {
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -260,9 +302,7 @@ const BASEMAPS = {
   }
 };
 
-// ── Overlay definitions ────────────────────────────────────────────────────
-// Waymarked Trails: free OSM-based overlay showing cycling & hiking networks
-// including Dutch/Belgian knooppunten (junction) networks
+// ── Overlay definitions ────────────────────────────────────────────
 const OVERLAYS = {
   cycling: L.tileLayer('https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png', {
     maxZoom: 19, opacity: 0.8,
@@ -274,7 +314,7 @@ const OVERLAYS = {
   })
 };
 
-// ── State ──────────────────────────────────────────────────────────────────
+// ── State ──────────────────────────────────────────────────────
 const waypoints = [];
 const markers   = [];
 let routeLayer  = null;
@@ -283,7 +323,7 @@ let totalDist   = 0;
 let curProfile  = 'pedestrian';
 let curBasemap  = 'osm';
 
-// ── Valhalla costing ───────────────────────────────────────────────────────
+// ── Valhalla costing ───────────────────────────────────────────
 const VALHALLA_URL = 'https://valhalla1.openstreetmap.de/route';
 const COSTING = {
   pedestrian: {
@@ -297,7 +337,7 @@ const COSTING = {
 };
 const LINE_COLOR = { pedestrian: '#c85a1e', bicycle: '#1a6fa8' };
 
-// ── Decode Valhalla precision-6 polyline ───────────────────────────────────
+// ── Decode Valhalla precision-6 polyline ─────────────────────────────────
 function decodeShape(str) {
   let i = 0, lat = 0, lng = 0, out = [];
   while (i < str.length) {
@@ -312,19 +352,17 @@ function decodeShape(str) {
   return out;
 }
 
-// ── Map ────────────────────────────────────────────────────────────────────
+// ── Map ────────────────────────────────────────────────────────────
 const map = L.map('map', { zoomControl: true }).setView([52.37, 4.89], 13);
 let activeBasemap = L.tileLayer(BASEMAPS.osm.url, BASEMAPS.osm.opts).addTo(map);
 
-// ── Basemap switcher ───────────────────────────────────────────────────────
+// ── Basemap switcher ───────────────────────────────────────────────
 function switchBasemap(id) {
   if (id === curBasemap) return;
   map.removeLayer(activeBasemap);
   const def = BASEMAPS[id];
   activeBasemap = L.tileLayer(def.url, def.opts).addTo(map);
-  // Ensure overlays stay on top
   Object.values(OVERLAYS).forEach(ol => { if (map.hasLayer(ol)) ol.bringToFront(); });
-  // Ensure route and markers stay on top
   if (routeLayer) routeLayer.bringToFront();
   curBasemap = id;
   document.querySelectorAll('.bm-btn').forEach(b => b.classList.toggle('active', b.dataset.id === id));
@@ -334,7 +372,7 @@ document.querySelectorAll('.bm-btn').forEach(btn => {
   btn.addEventListener('click', () => switchBasemap(btn.dataset.id));
 });
 
-// ── Overlay toggles ────────────────────────────────────────────────────────
+// ── Overlay toggles ─────────────────────────────────────────────
 document.getElementById('toggle-cycling').addEventListener('change', function() {
   this.checked ? OVERLAYS.cycling.addTo(map) : map.removeLayer(OVERLAYS.cycling);
   if (routeLayer) routeLayer.bringToFront();
@@ -346,7 +384,7 @@ document.getElementById('toggle-hiking').addEventListener('change', function() {
   if (routeLayer) routeLayer.bringToFront();
 });
 
-// ── Layers panel toggle ────────────────────────────────────────────────────
+// ── Layers panel toggle ────────────────────────────────────────────
 const btnLayers   = document.getElementById('btn-layers');
 const layersPanel = document.getElementById('layers-panel');
 
@@ -355,13 +393,12 @@ btnLayers.addEventListener('click', () => {
   btnLayers.classList.toggle('open', open);
 });
 
-// Close panel when clicking map
 map.on('click', () => {
   layersPanel.classList.remove('open');
   btnLayers.classList.remove('open');
 });
 
-// ── UI helpers ─────────────────────────────────────────────────────────────
+// ── UI helpers ─────────────────────────────────────────────────────
 function toast(msg, ms = 2500) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -389,7 +426,7 @@ function updateUI() {
   document.getElementById('hint').classList.toggle('hidden', waypoints.length > 0);
 }
 
-// ── Routing ────────────────────────────────────────────────────────────────
+// ── Routing ────────────────────────────────────────────────────────────
 async function calcRoute() {
   if (waypoints.length < 2) {
     if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
@@ -410,14 +447,56 @@ async function calcRoute() {
   } finally { setLoader(false); updateUI(); }
 }
 
-// ── Waypoint interaction ───────────────────────────────────────────────────
-map.on('click', async ({ latlng }) => {
-  const { lat, lng } = latlng;
-  const idx = waypoints.length;
-  waypoints.push({ lat, lng });
-  const m = L.marker([lat, lng], { icon: mkIcon(idx, waypoints.length), draggable: true }).addTo(map);
-  m.on('dragend', () => { const p = m.getLatLng(); waypoints[idx] = { lat: p.lat, lng: p.lng }; calcRoute(); });
+// ── Delete modal ─────────────────────────────────────────────────
+let markerToDelete = null;
+function showDeleteModal(m) {
+  markerToDelete = m;
+  document.getElementById('delete-modal').classList.remove('hidden');
+}
+document.getElementById('delete-confirm').addEventListener('click', async () => {
+  if (!markerToDelete) return;
+  const i = markers.indexOf(markerToDelete);
+  if (i !== -1) {
+    map.removeLayer(markerToDelete);
+    markers.splice(i, 1);
+    waypoints.splice(i, 1);
+    refreshMarkers();
+    await calcRoute();
+  }
+  markerToDelete = null;
+  document.getElementById('delete-modal').classList.add('hidden');
+});
+document.getElementById('delete-cancel').addEventListener('click', () => {
+  markerToDelete = null;
+  document.getElementById('delete-modal').classList.add('hidden');
+});
+
+// ── Waypoint interaction ───────────────────────────────────────────────
+function addMarker(lat, lng) {
+  const m = L.marker([lat, lng], {
+    icon: mkIcon(markers.length, markers.length + 1),
+    draggable: true,
+  }).addTo(map);
+
+  m.on('dragend', () => {
+    const i = markers.indexOf(m);
+    if (i === -1) return;
+    const p = m.getLatLng();
+    waypoints[i] = { lat: p.lat, lng: p.lng };
+    calcRoute();
+  });
+
+  m.on('click', (e) => {
+    L.DomEvent.stopPropagation(e);
+    showDeleteModal(m);
+  });
+
   markers.push(m);
+}
+
+map.on('click', async ({ latlng }) => {
+  waypoints.push({ lat: latlng.lat, lng: latlng.lng });
+  addMarker(latlng.lat, latlng.lng);
   refreshMarkers();
   await calcRoute();
 });
@@ -441,7 +520,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
   });
 });
 
-// ── GPX export ─────────────────────────────────────────────────────────────
+// ── GPX export ────────────────────────────────────────────────────────
 document.getElementById('btn-export').addEventListener('click', () => {
   if (routeCoords.length < 2) return;
   const name = curProfile === 'bicycle' ? 'Fietsroute' : 'Wandelroute';
@@ -466,4 +545,3 @@ updateUI();
 </script>
 </body>
 </html>
-
